@@ -38,7 +38,7 @@ return new class extends Migration
             $table->string('category')->nullable();
             $table->string('brand')->nullable();
             $table->boolean('is_storno')->nullable();
-            $table->json('payload')->nullable();
+            $table->longText('payload')->nullable();
             $table->timestamps();
 
             $table->index(['date', 'warehouse_name']);

@@ -2,6 +2,7 @@
 
 namespace App\Services\WbApi;
 
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 
 class WbDataImporter
@@ -34,12 +35,16 @@ class WbDataImporter
             $mappedRows = array_map(fn (array $item) => $this->mapper->map($endpoint, $item), $items);
 
             if ($mappedRows !== []) {
+                if (! config('wb-api.store_payload')) {
+                    $mappedRows = array_map(function (array $row): array {
+                        unset($row['payload']);
+
+                        return $row;
+                    }, $mappedRows);
+                }
+
                 foreach (array_chunk($mappedRows, (int) config('wb-api.db_batch')) as $chunk) {
-                    DB::table($table)->upsert(
-                        $chunk,
-                        ['source_key'],
-                        array_values(array_diff(array_keys($chunk[0]), ['source_key', 'created_at']))
-                    );
+                    $this->insertChunk($table, $chunk);
                 }
             }
 
@@ -82,5 +87,63 @@ class WbDataImporter
         }
 
         return $params;
+    }
+
+    private function insertChunk(string $table, array $chunk): void
+    {
+        if (DB::connection()->getDriverName() !== 'mysql') {
+            DB::table($table)->insertOrIgnore($chunk);
+
+            return;
+        }
+
+        $sql = $this->insertIgnoreSql($table, $chunk);
+        $attempt = 0;
+
+        while (true) {
+            try {
+                DB::unprepared($sql);
+
+                return;
+            } catch (QueryException $exception) {
+                DB::disconnect();
+
+                $attempt++;
+                if ($attempt >= 3) {
+                    throw $exception;
+                }
+            }
+        }
+    }
+
+    private function insertIgnoreSql(string $table, array $chunk): string
+    {
+        $columns = array_keys($chunk[0]);
+        $columnList = implode(', ', array_map(fn (string $column) => '`'.str_replace('`', '``', $column).'`', $columns));
+        $values = [];
+
+        foreach ($chunk as $row) {
+            $values[] = '('.implode(', ', array_map(fn (mixed $value) => $this->quote($value), array_values($row))).')';
+        }
+
+        return sprintf(
+            'INSERT IGNORE INTO `%s` (%s) VALUES %s',
+            str_replace('`', '``', $table),
+            $columnList,
+            implode(', ', $values),
+        );
+    }
+
+    private function quote(mixed $value): string
+    {
+        if ($value === null) {
+            return 'NULL';
+        }
+
+        if (is_bool($value)) {
+            return $value ? '1' : '0';
+        }
+
+        return DB::connection()->getPdo()->quote((string) $value);
     }
 }

@@ -29,7 +29,7 @@ return new class extends Migration
             $table->string('brand')->nullable();
             $table->boolean('is_cancel')->nullable();
             $table->dateTime('cancel_dt')->nullable();
-            $table->json('payload')->nullable();
+            $table->longText('payload')->nullable();
             $table->timestamps();
 
             $table->index(['date', 'warehouse_name']);

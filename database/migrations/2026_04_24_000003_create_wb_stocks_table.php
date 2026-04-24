@@ -30,7 +30,7 @@ return new class extends Migration
             $table->string('sc_code')->nullable();
             $table->decimal('price', 15, 2)->nullable();
             $table->decimal('discount', 8, 2)->nullable();
-            $table->json('payload')->nullable();
+            $table->longText('payload')->nullable();
             $table->timestamps();
 
             $table->index(['date', 'warehouse_name']);
