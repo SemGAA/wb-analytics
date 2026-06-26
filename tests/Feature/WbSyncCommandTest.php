@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -66,13 +67,17 @@ class WbSyncCommandTest extends TestCase
             '--to' => '2025-06-28',
         ])->assertExitCode(0);
 
+        $accountId = DB::table('accounts')->value('id');
+
         $this->assertDatabaseHas('wb_sales', [
+            'account_id' => $accountId,
             'sale_id' => 'S17613661853',
             'warehouse_name' => 'Электросталь',
             'nm_id' => 353001876,
         ]);
 
         $this->assertDatabaseHas('api_sync_logs', [
+            'account_id' => $accountId,
             'endpoint' => 'sales',
             'status' => 'success',
             'rows' => 1,

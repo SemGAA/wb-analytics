@@ -10,6 +10,7 @@ return new class extends Migration
     {
         Schema::create('api_sync_logs', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('account_id')->nullable()->constrained()->nullOnDelete();
             $table->string('endpoint', 32);
             $table->date('date_from')->nullable();
             $table->date('date_to')->nullable();
@@ -22,6 +23,7 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index(['endpoint', 'status']);
+            $table->index(['account_id', 'endpoint']);
             $table->index('started_at');
         });
     }

@@ -10,7 +10,8 @@ return new class extends Migration
     {
         Schema::create('wb_sales', function (Blueprint $table) {
             $table->id();
-            $table->char('source_key', 64)->unique();
+            $table->foreignId('account_id')->constrained()->cascadeOnDelete();
+            $table->char('source_key', 64);
             $table->string('g_number')->nullable();
             $table->date('date')->nullable();
             $table->dateTime('last_change_date')->nullable();
@@ -41,6 +42,8 @@ return new class extends Migration
             $table->longText('payload')->nullable();
             $table->timestamps();
 
+            $table->unique(['account_id', 'source_key']);
+            $table->index(['account_id', 'date']);
             $table->index(['date', 'warehouse_name']);
             $table->index('nm_id');
             $table->index('sale_id');

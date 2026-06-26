@@ -1,4 +1,24 @@
 services:
+  php:
+    build:
+      context: ./docker/php
+    container_name: wb_analytics_php
+    restart: unless-stopped
+    working_dir: /var/www/html
+    depends_on:
+      - mysql
+    volumes:
+      - ./:/var/www/html
+    environment:
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: wb_analytics
+      DB_USERNAME: wb_user
+      DB_PASSWORD: wb_password
+      WB_SYNC_TIMES: 06:00,18:00
+    command: sh docker/php/start.sh
+
   mysql:
     image: mysql:8.0
     container_name: wb_analytics_mysql
@@ -9,7 +29,7 @@ services:
       MYSQL_PASSWORD: wb_password
       MYSQL_ROOT_PASSWORD: root_password
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
 

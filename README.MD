@@ -1,134 +1,111 @@
 # WB Analytics Loader
 
-Laravel-проект для загрузки данных из тестового WB API в MySQL.
+Laravel-приложение для загрузки данных из WB API в MySQL.
 
-Данные загружаются из четырех эндпоинтов:
+Загружаются эндпоинты:
 
-- `/api/sales` - продажи
-- `/api/orders` - заказы
-- `/api/stocks` - остатки
-- `/api/incomes` - доходы
+- `/api/sales`
+- `/api/orders`
+- `/api/stocks`
+- `/api/incomes`
 
-Пагинация обрабатывается автоматически. По умолчанию за один запрос берется 500 строк.
-
-## Требования
-
-- PHP 8.1+
-- Composer
-- MySQL 8 или MariaDB 10.6+
-
-## Установка
+## Запуск через Docker
 
 ```bash
 cp .env.example .env
-composer install
-php artisan key:generate
-php artisan migrate
+docker compose build
+docker compose run --rm php composer install
+docker compose run --rm php php artisan key:generate
+docker compose up -d
 ```
 
-В `.env` нужно указать параметры базы и ключ API:
+В `docker-compose.yml` два сервиса: `php` и `mysql`. MySQL доступен с хоста на порту `3307`.
+
+## Настройка доступа
+
+Минимальный вариант - указать ключ в `.env`:
 
 ```env
-DB_CONNECTION=mysql
-DB_HOST=mysql-3358984e-wb-analytics.c.aivencloud.com
-DB_PORT=14282
-DB_DATABASE=defaultdb
-DB_USERNAME=avnadmin
-DB_PASSWORD=AVNS_Rw8Md-qeiaukayIWbQH
-DB_SSL=true
-
-WB_API_BASE_URL=http://109.73.206.144:6969
 WB_API_KEY=your_api_key
-WB_API_DEFAULT_FROM=2024-01-01
-WB_API_LIMIT=500
-WB_DB_BATCH=15
-WB_STORE_PAYLOAD=false
 ```
 
-`WB_STORE_PAYLOAD=false` оставляет в таблицах только нормализованные поля эндпоинтов. Поле `payload` остается nullable и может использоваться для хранения сырого JSON, если включить `WB_STORE_PAYLOAD=true`.
-
-## Загрузка данных
-
-Полная загрузка всех эндпоинтов:
+Для работы с несколькими аккаунтами данные лучше добавить через консольные команды:
 
 ```bash
-php artisan wb:sync --fresh
+docker compose exec php php artisan app:company:create "Company name" --code=company
+docker compose exec php php artisan app:account:create "Main account" --company=company --external-id=main
+docker compose exec php php artisan app:api-service:create wildberries --name="Wildberries API" --base-url=http://109.73.206.144:6969
+docker compose exec php php artisan app:token-type:create api-key --name="API key"
+docker compose exec php php artisan app:api-service:attach-token-type wildberries api-key
+docker compose exec php php artisan app:api-token:create --account=main --service=wildberries --type=api-key
 ```
 
-Загрузка одного эндпоинта:
+Для `bearer` используется `--type=bearer`, для логина и пароля - `--type=login-password --login=user`.
+
+## Импорт данных
+
+Импорт по одному аккаунту:
 
 ```bash
-php artisan wb:sync --endpoint=sales --fresh
+docker compose exec php php artisan wb:sync --account=main --fresh-only
 ```
 
-Загрузка за период:
+Импорт по всем активным аккаунтам:
 
 ```bash
-php artisan wb:sync --from=2025-06-01 --to=2026-04-24 --fresh
+docker compose exec php php artisan wb:sync --all-accounts --fresh-only
 ```
 
-Быстрый тест на одной странице:
+Импорт одного раздела:
 
 ```bash
-php artisan wb:sync --endpoint=orders --from=2026-01-24 --to=2026-01-24 --max-pages=1
+docker compose exec php php artisan wb:sync --account=main --endpoint=sales --from=2026-06-01 --to=2026-06-26
 ```
 
-Для `stocks` API принимает только `dateFrom`, поэтому `dateTo` для этого эндпоинта не отправляется.
+Отладочный вывод:
 
-## Доступы к БД
+```bash
+docker compose exec php php artisan wb:sync --account=main --endpoint=orders --max-pages=1 -v
+```
 
-```text
-host: mysql-3358984e-wb-analytics.c.aivencloud.com
-port: 14282
-database: defaultdb
-user: avnadmin
-password: AVNS_Rw8Md-qeiaukayIWbQH
-ssl: required
+## Автообновление
+
+Scheduler запускается в `php`-контейнере командой `schedule:work`. Расписание берется из `WB_SYNC_TIMES`:
+
+```env
+WB_SYNC_TIMES=06:00,18:00
+```
+
+По расписанию выполняется:
+
+```bash
+php artisan wb:sync --all-accounts --fresh-only
 ```
 
 ## Таблицы
 
-- `wb_sales` - продажи
-- `wb_orders` - заказы
-- `wb_stocks` - остатки
-- `wb_incomes` - доходы
-- `api_sync_logs` - история запусков импорта
+Справочники:
 
-В основных таблицах есть поле `source_key`. Оно собирается из ключевых полей записи и используется для повторного запуска импорта без дублей.
+- `companies`
+- `accounts`
+- `api_services`
+- `token_types`
+- `api_service_token_types`
+- `api_tokens`
 
-## Локальная база через Docker
+Данные:
 
-Если нужна локальная MySQL-база:
+- `wb_sales`
+- `wb_orders`
+- `wb_stocks`
+- `wb_incomes`
+- `api_sync_logs`
 
-```bash
-docker compose up -d
-php artisan migrate
-php artisan wb:sync --fresh
-```
-
-Локальные доступы из `docker-compose.yml`:
-
-```text
-host: 127.0.0.1
-port: 3306
-database: wb_analytics
-user: wb_user
-password: wb_password
-root password: root_password
-```
+В таблицах данных есть `account_id`, а уникальность построена по `account_id + source_key`, поэтому записи разных аккаунтов не перетирают друг друга.
 
 ## Проверка
 
-Тесты:
-
 ```bash
 php artisan test
-```
-
-Форматирование:
-
-```bash
 vendor/bin/pint
 ```
-
-Статус по строкам можно посмотреть на `/` или `/api/stats`.

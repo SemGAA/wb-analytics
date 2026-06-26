@@ -2,6 +2,7 @@
 
 namespace App\Services\WbApi;
 
+use Carbon\Carbon;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 
@@ -13,13 +14,16 @@ class WbDataImporter
     ) {}
 
     public function import(
+        int $accountId,
         string $endpoint,
         string $from,
         ?string $to,
         int $limit,
+        WbCredentials $credentials,
         ?int $maxPages = null,
         int $sleep = 0,
         ?callable $progress = null,
+        ?callable $debug = null,
     ): array {
         $table = $this->mapper->tableFor($endpoint);
         $page = 1;
@@ -28,11 +32,16 @@ class WbDataImporter
         $rows = 0;
 
         do {
-            $payload = $this->client->fetchPage($endpoint, $this->requestParams($endpoint, $from, $to, $page, $limit));
+            $payload = $this->client->fetchPage(
+                $endpoint,
+                $this->requestParams($endpoint, $from, $to, $page, $limit),
+                $credentials,
+                $debug,
+            );
             $items = $payload['data'] ?? [];
             $lastPage = (int) ($payload['meta']['last_page'] ?? $page);
 
-            $mappedRows = array_map(fn (array $item) => $this->mapper->map($endpoint, $item), $items);
+            $mappedRows = array_map(fn (array $item) => $this->mapper->map($endpoint, $item, $accountId), $items);
 
             if ($mappedRows !== []) {
                 if (! config('wb-api.store_payload')) {
@@ -43,9 +52,11 @@ class WbDataImporter
                     }, $mappedRows);
                 }
 
-                foreach (array_chunk($mappedRows, (int) config('wb-api.db_batch')) as $chunk) {
-                    $this->insertChunk($table, $chunk);
-                }
+                DB::transaction(function () use ($table, $mappedRows): void {
+                    foreach (array_chunk($mappedRows, (int) config('wb-api.db_batch')) as $chunk) {
+                        $this->insertChunk($table, $chunk);
+                    }
+                });
             }
 
             $pages++;
@@ -67,11 +78,32 @@ class WbDataImporter
         } while ($page <= $lastPage);
 
         return [
+            'account_id' => $accountId,
             'endpoint' => $endpoint,
             'pages' => $pages,
             'rows' => $rows,
             'last_page' => $lastPage,
         ];
+    }
+
+    public function clearAccountEndpoint(int $accountId, string $endpoint): void
+    {
+        DB::table($this->mapper->tableFor($endpoint))
+            ->where('account_id', $accountId)
+            ->delete();
+    }
+
+    public function freshFromDate(int $accountId, string $endpoint, string $fallback): string
+    {
+        $maxDate = DB::table($this->mapper->tableFor($endpoint))
+            ->where('account_id', $accountId)
+            ->max('date');
+
+        if ($maxDate === null) {
+            return $fallback;
+        }
+
+        return Carbon::parse($maxDate)->toDateString();
     }
 
     private function requestParams(string $endpoint, string $from, ?string $to, int $page, int $limit): array

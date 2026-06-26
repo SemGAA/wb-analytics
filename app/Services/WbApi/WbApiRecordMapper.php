@@ -18,20 +18,20 @@ class WbApiRecordMapper
         return $table;
     }
 
-    public function map(string $endpoint, array $item): array
+    public function map(string $endpoint, array $item, int $accountId): array
     {
         return match ($endpoint) {
-            'sales' => $this->mapSale($item),
-            'orders' => $this->mapOrder($item),
-            'stocks' => $this->mapStock($item),
-            'incomes' => $this->mapIncome($item),
+            'sales' => $this->mapSale($item, $accountId),
+            'orders' => $this->mapOrder($item, $accountId),
+            'stocks' => $this->mapStock($item, $accountId),
+            'incomes' => $this->mapIncome($item, $accountId),
             default => throw new InvalidArgumentException('Unknown endpoint '.$endpoint),
         };
     }
 
-    private function mapSale(array $item): array
+    private function mapSale(array $item, int $accountId): array
     {
-        return $this->withBaseColumns('sales', $item, [
+        return $this->withBaseColumns('sales', $item, $accountId, [
             'g_number' => $this->str($item['g_number'] ?? null),
             'date' => $this->date($item['date'] ?? null),
             'last_change_date' => $this->dateTime($item['last_change_date'] ?? null),
@@ -62,9 +62,9 @@ class WbApiRecordMapper
         ]);
     }
 
-    private function mapOrder(array $item): array
+    private function mapOrder(array $item, int $accountId): array
     {
-        return $this->withBaseColumns('orders', $item, [
+        return $this->withBaseColumns('orders', $item, $accountId, [
             'g_number' => $this->str($item['g_number'] ?? null),
             'date' => $this->dateTime($item['date'] ?? null),
             'last_change_date' => $this->dateTime($item['last_change_date'] ?? null),
@@ -86,9 +86,9 @@ class WbApiRecordMapper
         ]);
     }
 
-    private function mapStock(array $item): array
+    private function mapStock(array $item, int $accountId): array
     {
-        return $this->withBaseColumns('stocks', $item, [
+        return $this->withBaseColumns('stocks', $item, $accountId, [
             'date' => $this->date($item['date'] ?? null),
             'last_change_date' => $this->dateTime($item['last_change_date'] ?? null),
             'supplier_article' => $this->str($item['supplier_article'] ?? null),
@@ -111,9 +111,9 @@ class WbApiRecordMapper
         ]);
     }
 
-    private function mapIncome(array $item): array
+    private function mapIncome(array $item, int $accountId): array
     {
-        return $this->withBaseColumns('incomes', $item, [
+        return $this->withBaseColumns('incomes', $item, $accountId, [
             'income_id' => $this->int($item['income_id'] ?? null),
             'number' => $this->str($item['number'] ?? null),
             'date' => $this->date($item['date'] ?? null),
@@ -129,11 +129,12 @@ class WbApiRecordMapper
         ]);
     }
 
-    private function withBaseColumns(string $endpoint, array $item, array $columns): array
+    private function withBaseColumns(string $endpoint, array $item, int $accountId, array $columns): array
     {
         $now = Carbon::now()->toDateTimeString();
 
         return [
+            'account_id' => $accountId,
             'source_key' => $this->sourceKey($endpoint, $item),
             ...$columns,
             'payload' => json_encode($item, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),

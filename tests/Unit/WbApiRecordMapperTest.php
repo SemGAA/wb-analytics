@@ -30,8 +30,9 @@ class WbApiRecordMapperTest extends TestCase
             'brand' => 'e129baf5351375dd',
             'is_cancel' => false,
             'cancel_dt' => null,
-        ]);
+        ], 7);
 
+        $this->assertSame(7, $row['account_id']);
         $this->assertSame('2026-01-24 23:13:55', $row['date']);
         $this->assertSame('2026-01-25 00:00:00', $row['last_change_date']);
         $this->assertFalse($row['is_cancel']);
