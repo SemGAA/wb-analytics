@@ -1,6 +1,7 @@
 #!/bin/sh
 set -e
 
+git config --global --add safe.directory /var/www/html || true
 composer install --no-interaction --prefer-dist
 
 until php -r 'new PDO("mysql:host=".getenv("DB_HOST").";port=".getenv("DB_PORT").";dbname=".getenv("DB_DATABASE"), getenv("DB_USERNAME"), getenv("DB_PASSWORD"));' >/dev/null 2>&1; do
